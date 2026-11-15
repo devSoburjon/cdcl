@@ -22,7 +22,6 @@ JWT_TTL       = 7 * 24 * 3600
 
 ADMIN_SUBS = set(filter(None, os.getenv("ADMIN_GOOGLE_SUBS", "").split(",")))
 
-# Render'da majburiy True, chunki SameSite=None faqat Secure bilan ishlaydi
 COOKIE_SECURE = True
 
 
@@ -45,7 +44,6 @@ def google_start():
         f"&response_type=code&scope=openid%20email%20profile"
         f"&state={state}&access_type=online&prompt=select_account"
     )
-    # OAuth state cookie ham cross-site bo'lgani uchun SameSite=None
     resp.set_cookie("oauth_state", state, max_age=600,
                     httponly=True, secure=COOKIE_SECURE, samesite="none")
     return resp
@@ -88,13 +86,9 @@ async def google_callback(code: str, state: str, request: Request,
 
     token = jwt.encode({"sub": str(user.id), "exp": int(time.time()) + JWT_TTL},
                        JWT_SECRET, algorithm=JWT_ALG)
-    
-    # Frontend'ga yo'naltirish
-    resp = RedirectResponse(WEB_ORIGIN)
-    
-    # Session cookie'ni cross-site (frontend va backend har xil domenda) o'rnatish
-    resp.set_cookie("session", token, max_age=JWT_TTL,
-                    httponly=True, secure=COOKIE_SECURE, samesite="none")
+
+    # Cookie o'rniga tokenni URL parametri orqali frontend'ga uzatamiz
+    resp = RedirectResponse(f"{WEB_ORIGIN}/?token={token}")
     resp.delete_cookie("oauth_state")
     return resp
 
@@ -107,7 +101,13 @@ def logout():
 
 
 def current_user(request: Request, db: Session) -> User:
+    # 1) Cookie'dan qidiramiz
     tok = request.cookies.get("session")
+    # 2) Bo'lmasa, Authorization header'dan qidiramiz
+    if not tok:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            tok = auth[7:]
     if not tok:
         raise HTTPException(401, "no session")
     try:

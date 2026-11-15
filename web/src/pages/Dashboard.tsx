@@ -3,8 +3,7 @@ import type { User } from "../App";
 
 export default function Dashboard({ user }: { user: User }) {
   async function logout() {
-    const apiUrl = import.meta.env.VITE_API_URL || "";
-    await fetch(`${apiUrl}/api/auth/logout`, { method: "POST", credentials: "include" });
+    localStorage.removeItem("cdcl_token");
     window.location.reload();
   }
 
