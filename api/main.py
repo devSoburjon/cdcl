@@ -13,6 +13,7 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="CDCL API", version="0.1.0")
 
+# Aniq WEB_ORIGIN ga ruxsat beramiz. allow_credentials=True bilan "*" ishlamaydi.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.getenv("WEB_ORIGIN", "http://localhost:5173")],

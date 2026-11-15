@@ -15,14 +15,15 @@ GOOGLE_USER  = "https://openidconnect.googleapis.com/v1/userinfo"
 CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 REDIRECT_URI  = os.getenv("GOOGLE_REDIRECT_URI", "")
+WEB_ORIGIN    = os.getenv("WEB_ORIGIN", "http://localhost:5173")
 JWT_SECRET    = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_ALG       = "HS256"
 JWT_TTL       = 7 * 24 * 3600
 
 ADMIN_SUBS = set(filter(None, os.getenv("ADMIN_GOOGLE_SUBS", "").split(",")))
 
-# Render HTTPS beradi, lokalda HTTP. Cookie secure bayrog'i shunga moslashadi.
-COOKIE_SECURE = REDIRECT_URI.startswith("https://")
+# Render'da majburiy True, chunki SameSite=None faqat Secure bilan ishlaydi
+COOKIE_SECURE = True
 
 
 def make_username(db: Session, email: str) -> str:
@@ -44,8 +45,9 @@ def google_start():
         f"&response_type=code&scope=openid%20email%20profile"
         f"&state={state}&access_type=online&prompt=select_account"
     )
+    # OAuth state cookie ham cross-site bo'lgani uchun SameSite=None
     resp.set_cookie("oauth_state", state, max_age=600,
-                    httponly=True, secure=COOKIE_SECURE, samesite="lax")
+                    httponly=True, secure=COOKIE_SECURE, samesite="none")
     return resp
 
 
@@ -86,9 +88,13 @@ async def google_callback(code: str, state: str, request: Request,
 
     token = jwt.encode({"sub": str(user.id), "exp": int(time.time()) + JWT_TTL},
                        JWT_SECRET, algorithm=JWT_ALG)
-    resp = RedirectResponse(os.getenv("WEB_ORIGIN", "/"))
+    
+    # Frontend'ga yo'naltirish
+    resp = RedirectResponse(WEB_ORIGIN)
+    
+    # Session cookie'ni cross-site (frontend va backend har xil domenda) o'rnatish
     resp.set_cookie("session", token, max_age=JWT_TTL,
-                    httponly=True, secure=COOKIE_SECURE, samesite="lax")
+                    httponly=True, secure=COOKIE_SECURE, samesite="none")
     resp.delete_cookie("oauth_state")
     return resp
 
@@ -96,7 +102,7 @@ async def google_callback(code: str, state: str, request: Request,
 @router.post("/logout")
 def logout():
     resp = Response(status_code=204)
-    resp.delete_cookie("session")
+    resp.delete_cookie("session", samesite="none", secure=COOKIE_SECURE)
     return resp
 
 
